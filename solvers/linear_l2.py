@@ -6,7 +6,7 @@ from benchopt.stopping_criterion import SingleRunCriterion
 # - getting requirements info when all dependencies are not installed.
 with safe_import_context() as import_ctx:
     from sklearn.pipeline import make_pipeline
-    from sklearn.linear_model import LogisticRegression
+    from sklearn.linear_model import LogisticRegression, Ridge
 
 
 # The benchmark solvers must be named `Solver` and
@@ -14,15 +14,19 @@ with safe_import_context() as import_ctx:
 class Solver(BaseSolver):
 
     # Name to select the solver in the CLI and to display the results.
-    name = 'logreg_l2'
+    name = 'linear_l2'
+
+    install_cmd = 'conda'
+    requirements = ['scikit-learn']
 
     parameters = {
-        'C': [1e-1, 1, 10],
+        'reg_lambda': [1e-1, 1, 10],
+        'num_rounds': [1000],
     }
 
     stopping_criterion = SingleRunCriterion()
 
-    def set_objective(self, X_train, y_train, preprocessor):
+    def set_objective(self, X_train, y_train, preprocessor, prob_type, num_classes):
         """Get the data to be passed to fit the solver.
 
         Parameters
@@ -32,12 +36,21 @@ class Solver(BaseSolver):
         preprocessor : sklearn transformer
             A transformer to preprocess the data before fitting the model.
             This part should be used to construct a `sklearn.Pipeline`.
+        prob_type : str, 'bin', 'mult', or 'reg'
+            The type of problem: binary classification, multiclass
+            classification, or regression.
+        num_classes : int or None
+            The number of classes in the dataset. This is only used for classification.
         """
+
         self.X_train, self.y_train = X_train, y_train
-        self.model = make_pipeline(
-            preprocessor,
-            LogisticRegression(C=self.C, max_iter=1000)
-        )
+
+        if prob_type == 'reg':
+            self.model = Ridge(alpha = self.reg_lambda, max_iter = self.num_rounds)
+        elif prob_type == 'bin':
+            self.model = LogisticRegression(C = 1/self.reg_lambda, max_iter = self.num_rounds)
+        elif prob_type == 'mult':
+            self.model = LogisticRegression(C = 1/self.reg_lambda, max_iter = self.num_rounds, multi_class = 'multinomial')
 
     def run(self, n_iter):
         # This is the function that is called to evaluate the solver.
